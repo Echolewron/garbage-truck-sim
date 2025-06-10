@@ -1,0 +1,81 @@
+local module = {}
+
+local Runtime = game:GetService("RunService")
+local Tween = game:GetService("TweenService")
+local Players = game:GetService("Players")
+
+local truck = require(script.Parent.TruckModule)
+
+local camera = workspace.CurrentCamera
+local offset_value_object = script.CameraOffsetValue
+local player_exit_offset : CFrame = script.PlayerExitOffset.Value
+
+local local_player : Player? = Players.LocalPlayer
+local local_char : Model? = local_player.Character or local_player.CharacterAdded:Wait()
+
+local is_truck_view = true
+
+local truck_view_offset = CFrame.new(-40.85, 24.356, 0, -0, 0.512112916, -0.858918071, -0, 0.858918071, 0.512112916, 1, 0, -0)
+local bins_view_offset = CFrame.new(19.7769604, 17.5363579, 30.1227818, 0.887170553, -0.184596777, 0.422909588, -0, 0.916496158, 0.400043488, -0.461441785, -0.354906797, 0.813088298)
+local camera_TweenInfo = TweenInfo.new(0.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+
+-- Switches view between side view and top view
+local current_animation : Tween? = nil
+function module.SwitchView()
+	is_truck_view = not is_truck_view
+	
+	local target_offset = is_truck_view and truck_view_offset or bins_view_offset
+	
+	if current_animation then
+		current_animation:Cancel()
+	end
+	
+	current_animation = Tween:Create(offset_value_object, camera_TweenInfo, {Value = target_offset})
+	current_animation:Play()
+	
+end
+
+-- Makes camera always follow the truck
+offset_value_object.Value = truck_view_offset
+function module.BeginCameraFollow()
+	
+	repeat
+		camera.CameraType = Enum.CameraType.Scriptable
+	until camera.CameraType == Enum.CameraType.Scriptable
+	
+	Runtime.Stepped:Connect(function()
+		if not script:GetAttribute("IsPlayerOut") then
+			camera.CFrame = truck.model.PrimaryPart.CFrame * offset_value_object.Value
+		end
+	end)
+end
+
+-- Switches control between truck and player
+-- Allows player to exit the truck
+function module.SwitchControl()
+	
+	if current_animation and current_animation.PlaybackState == Enum.PlaybackState.Playing then
+		return
+	end
+	
+	if truck.currently_animating then
+		return
+	end
+	
+	script:SetAttribute("IsPlayerOut", not script:GetAttribute("IsPlayerOut"))
+	
+	if script:GetAttribute("IsPlayerOut") then
+		local_char:PivotTo(truck.model:GetPivot() * player_exit_offset)
+		local_char.Humanoid.WalkSpeed = 16
+		camera.CameraSubject = local_char.Humanoid
+		camera.CameraType = Enum.CameraType.Custom
+	else
+		local_char:PivotTo(workspace.SpawnLocation.CFrame + Vector3.new(0, 5, 0))
+		local_char.Humanoid.WalkSpeed = 0
+		camera.CameraType = Enum.CameraType.Scriptable
+	end
+	
+end
+
+
+return module

@@ -1,0 +1,107 @@
+local uis = game:GetService("UserInputService")
+local rStorage = game:GetService("ReplicatedStorage")
+
+local truck = require(script.TruckModule)
+local camera_module = require(script.CameraModule)
+local ObjectKeyTable = require(rStorage:WaitForChild("ObjectKeyTable"))
+
+local remote = rStorage:WaitForChild("Remote")
+local rFunction = rStorage:WaitForChild("rFunction")
+local structures_folder = workspace.GeneratedStructures
+
+type ControlDictionary = {
+	[string] : {
+		Inputs : {Enum.KeyCode},
+		ResponseFunction : () -> nil,
+	}
+}
+
+-- Dictionary: What input (can be multiple) -> function
+-- This allows for mapping multiple inputs to one function
+local controls : ControlDictionary = {
+	FORWARD = {
+		Inputs = {Enum.KeyCode.Up, Enum.KeyCode.W},
+		ResponseFunction = truck.MoveForward,
+	},
+	
+	LEFT = {
+		Inputs = {Enum.KeyCode.Left, Enum.KeyCode.A},
+		ResponseFunction = truck.MoveLeft
+	},
+	
+	RIGHT = {
+		Inputs = {Enum.KeyCode.Right, Enum.KeyCode.D},
+		ResponseFunction = truck.MoveRight,
+	},
+	
+	BACK = {
+		Inputs = {Enum.KeyCode.Down, Enum.KeyCode.S},
+		ResponseFunction = truck.MoveBack,
+	},
+	
+	CAMERA_SWITCH = {
+		Inputs = {Enum.KeyCode.C},
+		ResponseFunction = camera_module.SwitchView,
+	},
+	
+	EXIT_TRUCK = {
+		Inputs = {Enum.KeyCode.E},
+		ResponseFunction = camera_module.SwitchControl,
+	},
+}
+
+local camera = workspace.CurrentCamera
+
+wait(1)
+camera.CameraSubject = truck.model.PrimaryPart
+camera_module.BeginCameraFollow()
+
+-- Truck input logic
+uis.InputEnded:Connect(function(input)
+	
+	-- Ignores input if textbox is selected
+	if uis:GetFocusedTextBox() then
+		return
+	end
+	
+	-- Ignores non-keyboard input
+	if input.UserInputType ~= Enum.UserInputType.Keyboard then
+		return
+	end
+	
+	-- Searches for action current input in its list
+	for _, action in pairs(controls) do
+		for _, input_key in pairs(action.Inputs) do
+			if input_key == input.KeyCode then
+				
+				-- Calls response function to the input
+				local old_truck_pos = truck.model.WorldPivot.Position
+				action.ResponseFunction()
+				
+				if old_truck_pos ~= truck.model.WorldPivot.Position then
+					rFunction:InvokeServer("Update World", truck.map_pos)
+				end
+				
+				break
+			end
+		end
+	end
+end)
+
+remote.OnClientEvent:Connect(function(context, house_name, bin_name)
+	
+	if context ~= "Bin PickUp" then
+		return
+	end
+	
+	if truck.currently_animating then
+		return
+	end
+	
+	local bin : Model = structures_folder[house_name].GarbageBins[bin_name]
+	
+	truck.CollectBin(house_name, bin)
+	
+end)
+
+local new_map = rFunction:InvokeServer("Update World", Vector2.new(0,0))
